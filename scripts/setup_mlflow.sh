@@ -35,7 +35,7 @@ nohup mlflow server \
   --host 0.0.0.0 \
   --port 5000 \
   --serve-artifacts \
-  > /var/log/mlflow-server.log 2>&1 &
+  > ~/mlflow-server.log 2>&1 &
 
 echo "Waiting for MLflow server to be ready..."
 for i in $(seq 1 30); do
