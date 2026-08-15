@@ -16,7 +16,7 @@ SECRET=$(aws secretsmanager get-secret-value \
   --output text)
 
 DB_USERNAME=$(echo ${SECRET} | python3 -c "import sys,json; print(json.load(sys.stdin)['username'])")
-DB_PASSWORD=$(echo ${SECRET} | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])")
+DB_PASSWORD=$(echo ${SECRET} | python3 -c "import sys,json,urllib.parse; print(urllib.parse.quote(json.load(sys.stdin)['password'], safe=''))")
 DB_HOST=$(echo ${SECRET} | python3 -c "import sys,json; print(json.load(sys.stdin)['host'])")
 DB_NAME=$(echo ${SECRET} | python3 -c "import sys,json; print(json.load(sys.stdin)['dbname'])")
 
@@ -50,6 +50,6 @@ echo ""
 echo "================================================"
 echo "MLflow server running"
 echo "Artifacts: s3://${MLFLOW_BUCKET}/mlflow-artifacts"
-echo "Logs: /var/log/mlflow-server.log"
+echo "Logs: ~/mlflow-server.log"
 echo "Port-forward: ssh -L 5000:localhost:5000 -i KEY.pem ec2-user@EC2_IP"
 echo "================================================"
