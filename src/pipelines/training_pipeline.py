@@ -53,7 +53,7 @@ def preprocess(
 def train(
     data_path: str = typer.Option("data/processed/transactions_processed.csv"),
     params_path: str = typer.Option("params.yaml"),
-    tuning: bool = typer.Option(True, "--tuning/--no-tuning"),
+    tuning: bool = typer.Option(True),
 ):
     """Stage 3: Train XGBoost model with Optuna hyperparameter tuning."""
     from src.training.trainer import train_fraud_model
@@ -103,7 +103,7 @@ def monitor(
 @app.command()
 def run_all(
     data_path: str = typer.Option("data/raw/transactions.csv"),
-    tuning: bool = typer.Option(True, "--tuning/--no-tuning"),
+    tuning: bool = typer.Option(True),
 ):
     """Run the complete MLOps pipeline end-to-end."""
     from src.data.validation import validate_fraud_data
