@@ -53,13 +53,13 @@ def preprocess(
 def train(
     data_path: str = typer.Option("data/processed/transactions_processed.csv"),
     params_path: str = typer.Option("params.yaml"),
-    tuning: str = typer.Option("false"),
+    with_tuning: str = typer.Option("false", help="Run Optuna tuning: true or false"),
 ):
     """Stage 3: Train XGBoost model with Optuna hyperparameter tuning."""
     from src.training.trainer import train_fraud_model
 
     console.rule("[bold green]Stage 3: Model Training")
-    model, metrics, run_id = train_fraud_model(data_path, params_path, run_tuning=tuning.lower() == "true")
+    model, metrics, run_id = train_fraud_model(data_path, params_path, run_tuning=with_tuning.lower() == "true")
     rprint("[green]✓ Training complete[/green]")
     rprint(f"  MLflow run ID: {run_id}")
     rprint(f"  AUPRC={metrics['average_precision']:.4f} | ROC-AUC={metrics['roc_auc']:.4f} | F1={metrics['f1_score']:.4f}")
@@ -103,7 +103,7 @@ def monitor(
 @app.command()
 def run_all(
     data_path: str = typer.Option("data/raw/transactions.csv"),
-    tuning: str = typer.Option("false"),
+    with_tuning: str = typer.Option("false", help="Run Optuna tuning: true or false"),
 ):
     """Run the complete MLOps pipeline end-to-end."""
     from src.data.validation import validate_fraud_data
@@ -124,7 +124,7 @@ def run_all(
 
     model, metrics, run_id = train_fraud_model(
         "data/processed/transactions_processed.csv",
-        run_tuning=tuning.lower() == "true",
+        run_tuning=with_tuning.lower() == "true",
     )
 
     detect_drift(
