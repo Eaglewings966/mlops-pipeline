@@ -1,0 +1,60 @@
+name: Daily Drift Detection
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  detect-drift:
+    name: Run Drift Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Pull latest data from S3
+        run: |
+          aws s3 cp \
+            s3://${{ secrets.DVC_BUCKET }}/current/transactions_current.csv \
+            data/processed/current_data.csv \
+            --region ${{ env.AWS_REGION }} || echo "No current data in S3"
+      - name: Run drift detection
+        env:
+          MLFLOW_TRACKING_URI: http://${{ secrets.MLFLOW_HOST }}:5000
+          EVIDENTLY_BUCKET: ${{ secrets.EVIDENTLY_BUCKET }}
+          SNS_TOPIC_ARN: ${{ secrets.SNS_TOPIC_ARN }}
+        run: |
+          python -m src.pipelines.training_pipeline monitor \
+            --reference-path data/reference/reference_data.csv \
+            --current-path data/processed/current_data.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-report-${{ github.run_id }}
+          path: evidently_reports/
+          retention-days: 30
+      - name: Trigger retraining if drift detected
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRIFT=$(cat evidently_reports/drift_metrics.json | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('drift_detected', False))")
+          if [ "${DRIFT}" == "True" ]; then
+            echo "Drift detected — triggering retraining"
+            gh workflow run training-pipeline.yml -f run_tuning=false -f force_retrain=true
+          else
+            echo "No drift — skipping retraining"
+          fi

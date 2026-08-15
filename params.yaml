@@ -1,0 +1,82 @@
+# MLOps Pipeline Parameters
+# All configurable values for the training pipeline
+# DVC tracks changes to this file
+
+data:
+  test_size: 0.2
+  validation_size: 0.1
+  random_state: 42
+  target_column: isFraud
+  drop_columns:
+    - TransactionID
+    - TransactionDT
+
+training:
+  model_type: xgboost
+  cv_folds: 5
+  n_optuna_trials: 50
+  early_stopping_rounds: 50
+  eval_metric: aucpr
+
+xgboost_defaults:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 1
+  scale_pos_weight: 10
+  use_label_encoder: false
+  eval_metric: aucpr
+  tree_method: hist
+  random_state: 42
+
+optuna:
+  n_trials: 50
+  direction: maximize
+  metric: average_precision
+  sampler: TPESampler
+  pruner: HyperbandPruner
+
+hyperparameter_space:
+  n_estimators:
+    low: 100
+    high: 1000
+    step: 100
+  max_depth:
+    low: 3
+    high: 10
+  learning_rate:
+    low: 0.01
+    high: 0.3
+    log: true
+  subsample:
+    low: 0.5
+    high: 1.0
+  colsample_bytree:
+    low: 0.5
+    high: 1.0
+  min_child_weight:
+    low: 1
+    high: 10
+  scale_pos_weight:
+    low: 1
+    high: 20
+
+evaluation:
+  primary_metric: average_precision
+  threshold_metric: f1
+  classification_threshold: 0.5
+
+monitoring:
+  drift_threshold: 0.05
+  psi_threshold: 0.2
+  reference_data_size: 10000
+  monitoring_window_days: 7
+  alert_on_drift: true
+
+mlflow:
+  experiment_name: fraud-detection
+  model_name: fraud-detection-xgboost
+  registered_model_stage: Production
+  auto_log: true

@@ -1,0 +1,7 @@
+aws_region         = "us-east-1"
+project_name       = "mlops-pipeline"
+environment        = "dev"
+owner              = "emmanuel-ubani"
+mlflow_db_username = "mlflowuser"
+mlflow_db_name     = "mlflowdb"
+alert_email        = "devopsalert3@gmail.com"

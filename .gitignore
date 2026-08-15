@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data — tracked by DVC not git
+data/raw/
+data/processed/
+data/reference/
+*.csv
+*.parquet
+
+# Models
+models/
+mlruns/
+mlartifacts/
+
+# Reports
+evidently_reports/
+great_expectations/
+
+# Environment
+.env
+*.pem
+*.key
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+*.tfplan
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# MLflow
+mlflow.db

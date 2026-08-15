@@ -1,0 +1,53 @@
+name: Model Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: "MLflow model version to deploy (leave blank for latest Production)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy model via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=mlops-serving-server" \
+            --parameters 'commands=[
+              "cd /home/ec2-user/mlops-pipeline",
+              "git pull origin main",
+              "pkill -f uvicorn || true",
+              "sleep 2",
+              "nohup python3.11 -m uvicorn src.serving.api:app --host 0.0.0.0 --port 8000 --workers 2 > /var/log/fraud-api.log 2>&1 &",
+              "sleep 5",
+              "curl -sf http://localhost:8000/health && echo Deployment successful"
+            ]' \
+            --region ${{ env.AWS_REGION }}
+      - name: Health check
+        run: |
+          sleep 15
+          curl -sf http://${{ secrets.SERVING_HOST }}:8000/health
+      - name: Notify
+        run: |
+          aws sns publish \
+            --topic-arn ${{ secrets.SNS_TOPIC_ARN }} \
+            --subject "✅ Manual Deployment Complete" \
+            --message "Fraud detection model manually deployed. Version: ${{ github.event.inputs.model_version || 'latest Production' }}" \
+            --region ${{ env.AWS_REGION }}

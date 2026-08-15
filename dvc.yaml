@@ -1,0 +1,76 @@
+stages:
+  validate_data:
+    cmd: python3.11 -m src.pipelines.training_pipeline validate
+    deps:
+      - data/raw/transactions.csv
+      - src/data/validation.py
+      - src/config.py
+    params:
+      - params.yaml:
+        - data
+    outs:
+      - data/processed/validation_report.json
+
+  preprocess:
+    cmd: python3.11 -m src.pipelines.training_pipeline preprocess
+    deps:
+      - data/raw/transactions.csv
+      - src/data/preprocessing.py
+      - src/features/engineering.py
+      - src/config.py
+      - data/processed/validation_report.json
+    params:
+      - params.yaml:
+        - data
+    outs:
+      - data/processed/transactions_processed.csv
+      - data/processed/feature_metadata.json
+      - data/reference/reference_data.csv
+
+  train:
+    cmd: python3.11 -m src.pipelines.training_pipeline train
+    deps:
+      - data/processed/transactions_processed.csv
+      - src/training/trainer.py
+      - src/training/hyperparameter_tuning.py
+      - src/config.py
+    params:
+      - params.yaml:
+        - training
+        - xgboost_defaults
+        - optuna
+        - hyperparameter_space
+    metrics:
+      - data/processed/training_metrics.json:
+          cache: false
+    outs:
+      - models/registry/model.json:
+          cache: false
+
+  evaluate:
+    cmd: python3.11 -m src.pipelines.training_pipeline evaluate
+    deps:
+      - data/processed/transactions_processed.csv
+      - src/evaluation/metrics.py
+      - src/evaluation/explainability.py
+      - src/config.py
+    params:
+      - params.yaml:
+        - evaluation
+    metrics:
+      - data/processed/evaluation_metrics.json:
+          cache: false
+
+  monitor_drift:
+    cmd: python3.11 -m src.pipelines.training_pipeline monitor
+    deps:
+      - data/processed/transactions_processed.csv
+      - data/reference/reference_data.csv
+      - src/monitoring/drift_detector.py
+      - src/config.py
+    params:
+      - params.yaml:
+        - monitoring
+    metrics:
+      - evidently_reports/drift_metrics.json:
+          cache: false

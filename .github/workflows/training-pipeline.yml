@@ -1,0 +1,165 @@
+name: MLOps Training Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/**'
+      - 'src/**'
+      - 'params.yaml'
+      - 'dvc.yaml'
+  workflow_dispatch:
+    inputs:
+      run_tuning:
+        description: "Run Optuna hyperparameter tuning"
+        required: false
+        default: "true"
+        type: boolean
+      force_retrain:
+        description: "Force retraining even without data changes"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install black ruff mypy
+      - run: black --check src/ tests/
+      - run: ruff check src/
+      - run: mypy src/ --ignore-missing-imports || true
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    env:
+      TESTING: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements.txt pytest pytest-cov moto
+      - run: python -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=xml -v
+      - uses: codecov/codecov-action@v3
+        with:
+          file: coverage.xml
+
+  pull-data:
+    name: Pull Data with DVC
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install dvc dvc-s3
+      - run: |
+          dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
+          dvc remote modify s3remote region us-east-1
+      - run: dvc pull data/raw/transactions.csv || echo "No cached data"
+      - uses: actions/cache@v3
+        with:
+          path: data/
+          key: mlops-data-${{ hashFiles('dvc.lock') }}
+
+  train:
+    name: Train Model
+    runs-on: ubuntu-latest
+    needs: pull-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements.txt
+      - uses: actions/cache@v3
+        with:
+          path: data/
+          key: mlops-data-${{ hashFiles('dvc.lock') }}
+      - name: Set environment variables
+        run: |
+          echo "MLFLOW_TRACKING_URI=http://${{ secrets.MLFLOW_HOST }}:5000" >> $GITHUB_ENV
+          echo "MLFLOW_EXPERIMENT_NAME=fraud-detection" >> $GITHUB_ENV
+          echo "MLFLOW_MODEL_NAME=fraud-detection-xgboost" >> $GITHUB_ENV
+          echo "DVC_BUCKET=${{ secrets.DVC_BUCKET }}" >> $GITHUB_ENV
+          echo "MLFLOW_BUCKET=${{ secrets.MLFLOW_BUCKET }}" >> $GITHUB_ENV
+          echo "EVIDENTLY_BUCKET=${{ secrets.EVIDENTLY_BUCKET }}" >> $GITHUB_ENV
+          echo "SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}" >> $GITHUB_ENV
+      - run: python -m src.pipelines.training_pipeline validate
+      - run: python -m src.pipelines.training_pipeline preprocess
+      - run: |
+          python -m src.pipelines.training_pipeline train \
+            ${{ github.event.inputs.run_tuning == 'true' && '--tuning' || '--no-tuning' }}
+      - run: python -m src.pipelines.training_pipeline monitor
+      - run: dvc push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: training-metrics
+          path: data/processed/training_metrics.json
+          retention-days: 90
+
+  deploy:
+    name: Deploy Model
+    runs-on: ubuntu-latest
+    needs: train
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Restart serving API on EC2
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=mlops-serving-server" \
+            --parameters 'commands=[
+              "cd /home/ec2-user/mlops-pipeline",
+              "git pull",
+              "pkill -f uvicorn || true",
+              "sleep 2",
+              "nohup python3.11 -m uvicorn src.serving.api:app --host 0.0.0.0 --port 8000 > /var/log/fraud-api.log 2>&1 &",
+              "sleep 3",
+              "curl -sf http://localhost:8000/health && echo Model serving restarted"
+            ]' \
+            --region ${{ env.AWS_REGION }}
+      - name: Smoke test
+        run: |
+          sleep 10
+          curl -sf \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"TransactionAmt": 150.0, "TransactionHour": 14}' \
+            http://${{ secrets.SERVING_HOST }}:8000/predict
+      - name: Notify deployment
+        run: |
+          aws sns publish \
+            --topic-arn ${{ secrets.SNS_TOPIC_ARN }} \
+            --subject "✅ Fraud Detection Model Deployed" \
+            --message "New model version deployed to production." \
+            --region ${{ env.AWS_REGION }}
