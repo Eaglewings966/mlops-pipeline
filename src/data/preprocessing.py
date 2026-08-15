@@ -43,17 +43,8 @@ def preprocess_fraud_data(
     """
     config = get_config()
     logger.info(f"Loading data from {input_path}...")
-    df = pd.read_csv(input_path)
+    df = pd.read_csv(input_path, nrows=100_000)
     logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
-
-    # Sample to 100k rows to stay within t3.large memory limits
-    if len(df) > 100_000:
-        fraud = df[df[config.target_column] == 1]
-        legit = df[df[config.target_column] == 0].sample(
-            n=min(95_000, len(df[df[config.target_column] == 0])), random_state=42
-        )
-        df = pd.concat([fraud.sample(n=min(5_000, len(fraud)), random_state=42), legit]).sample(frac=1, random_state=42).reset_index(drop=True)
-        logger.info(f"Sampled to {len(df):,} rows (memory optimization)")
 
     drop_cols = ["TransactionID", "TransactionDT"]
     df = df.drop(columns=[c for c in drop_cols if c in df.columns])
@@ -61,7 +52,7 @@ def preprocess_fraud_data(
     # Engineer time-based features from TransactionDT
     raw_cols = pd.read_csv(input_path, nrows=1).columns
     if "TransactionDT" in raw_cols:
-        dt_col = pd.read_csv(input_path, usecols=["TransactionDT"])
+        dt_col = pd.read_csv(input_path, usecols=["TransactionDT"], nrows=100_000)
         df["TransactionHour"] = (dt_col["TransactionDT"] // 3600 % 24).astype(int)
         df["TransactionDay"] = (dt_col["TransactionDT"] // 86400 % 7).astype(int)
     else:
