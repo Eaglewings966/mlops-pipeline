@@ -70,6 +70,10 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Validate AWS credentials
+        run: aws sts get-caller-identity --output json
+      - name: Validate AWS credentials
+        run: aws sts get-caller-identity --output json
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -93,6 +97,8 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Validate AWS credentials
+        run: aws sts get-caller-identity --output json
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
