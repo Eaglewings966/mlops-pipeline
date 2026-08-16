@@ -178,7 +178,22 @@ resource "aws_secretsmanager_secret_version" "mlflow_db" {
 }
 
 # -------------------------------------------------------
-# IAM ROLE — MLOps EC2 instances
+# OIDC PROVIDER — GitHub Actions
+# -------------------------------------------------------
+
+resource "aws_iam_openid_connect_provider" "github_actions" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  # GitHub's OIDC thumbprint (stable value for token.actions.githubusercontent.com)
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+
+  tags = { Name = "${var.project_name}-github-oidc-provider" }
+}
+
+# -------------------------------------------------------
+# IAM ROLE — MLOps EC2 instances + GitHub Actions OIDC
 # -------------------------------------------------------
 
 resource "aws_iam_role" "mlops_runner" {
@@ -186,11 +201,28 @@ resource "aws_iam_role" "mlops_runner" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "ec2.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      },
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github_actions.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
+          }
+        }
+      }
+    ]
   })
 }
 

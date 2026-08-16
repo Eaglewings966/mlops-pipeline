@@ -39,3 +39,9 @@ variable "alert_email" {
   type        = string
   default     = "devopsalert3@gmail.com"
 }
+
+variable "github_repo" {
+  description = "GitHub repo in owner/name format, used to scope the OIDC trust policy"
+  type        = string
+  default     = "Eaglewings966/mlops-pipeline"
+}
