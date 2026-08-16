@@ -72,15 +72,21 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Validate AWS credentials
         run: aws sts get-caller-identity --output json
-      - name: Validate AWS credentials
-        run: aws sts get-caller-identity --output json
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install dvc dvc-s3
-      - run: |
+      - name: Initialize DVC
+        run: |
+          dvc init
+          git config user.email "ci@github-actions"
+          git config user.name "GitHub Actions"
+          git add .dvc
+          git commit -m "ci: init dvc [skip ci]"
+      - name: Configure DVC remote
+        run: |
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
-          dvc remote modify s3remote region us-east-1
+          dvc remote modify s3remote region ${{ env.AWS_REGION }}
       - run: dvc pull data/raw/transactions.csv || echo "No cached data"
       - uses: actions/cache@v3
         with:
@@ -122,7 +128,14 @@ jobs:
           python -m src.pipelines.training_pipeline train \
             ${{ github.event.inputs.run_tuning == 'true' && '--tuning' || '--no-tuning' }}
       - run: python -m src.pipelines.training_pipeline monitor
-      - run: dvc push
+      - name: Configure DVC remote and push
+        run: |
+          dvc init
+          git config user.email "ci@github-actions"
+          git config user.name "GitHub Actions"
+          dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
+          dvc remote modify s3remote region ${{ env.AWS_REGION }}
+          dvc push
       - uses: actions/upload-artifact@v4
         with:
           name: training-metrics
