@@ -12,11 +12,7 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket         = "YOUR_TFSTATE_BUCKET"
-    key            = "mlops-pipeline/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "terraform-state-lock"
-    encrypt        = true
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
