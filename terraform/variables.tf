@@ -45,3 +45,15 @@ variable "github_repo" {
   type        = string
   default     = "Eaglewings966/mlops-pipeline"
 }
+
+variable "github_owner_id" {
+  description = "GitHub owner (user/org) numeric ID — required for immutable sub claims (repos created after July 15 2026)"
+  type        = string
+  default     = "217933949"
+}
+
+variable "github_repo_id" {
+  description = "GitHub repository numeric ID — required for immutable sub claims (repos created after July 15 2026)"
+  type        = string
+  default     = "1335439580"
+}

@@ -218,7 +218,9 @@ resource "aws_iam_role" "mlops_runner" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
+            # New immutable format required for repos created after July 15 2026:
+            # repo:OWNER@OWNER_ID/REPO@REPO_ID:*
+            "token.actions.githubusercontent.com:sub" = "repo:Eaglewings966@${var.github_owner_id}/mlops-pipeline@${var.github_repo_id}:*"
           }
         }
       }
