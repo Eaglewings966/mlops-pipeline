@@ -125,9 +125,13 @@ jobs:
           echo "SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}" >> $GITHUB_ENV
       - run: python -m src.pipelines.training_pipeline validate
       - run: python -m src.pipelines.training_pipeline preprocess
-      - run: |
-          python -m src.pipelines.training_pipeline train \
-            ${{ github.event.inputs.run_tuning == 'true' && '--tuning' || '--no-tuning' }}
+      - name: Train model
+        run: |
+          if [ "${{ github.event.inputs.run_tuning }}" = "true" ]; then
+            python -m src.pipelines.training_pipeline train --tuning
+          else
+            python -m src.pipelines.training_pipeline train --no-tuning
+          fi
       - run: python -m src.pipelines.training_pipeline monitor
       - name: Configure DVC remote and push
         run: |
