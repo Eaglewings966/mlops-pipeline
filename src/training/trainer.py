@@ -101,9 +101,6 @@ def train_fraud_model(
         f"fraud rate: {y_train_res.mean():.3%}"
     )
 
-    mlflow.set_tracking_uri(config.mlflow_tracking_uri)
-    mlflow.set_experiment(config.mlflow_experiment_name)
-
     # ----------------------------------------------------------------
     # Core training — runs regardless of MLflow availability
     # ----------------------------------------------------------------
@@ -166,8 +163,11 @@ def train_fraud_model(
     # ----------------------------------------------------------------
     # MLflow logging — optional, won't fail the pipeline if unreachable
     # ----------------------------------------------------------------
-    run_id = "local-" + Path("data/processed/training_metrics.json").stat().st_mtime.__str__().replace(".", "")[:16]
+    run_id = "local-no-mlflow"
     try:
+        mlflow.set_tracking_uri(config.mlflow_tracking_uri)
+        mlflow.set_experiment(config.mlflow_experiment_name)
+
         with mlflow.start_run(run_name="fraud-detection-xgboost") as run:
             run_id = run.info.run_id
             logger.info(f"MLflow run ID: {run_id}")
