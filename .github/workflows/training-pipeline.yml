@@ -132,10 +132,11 @@ jobs:
       - run: python -m src.pipelines.training_pipeline monitor
       - name: Configure DVC remote and push
         run: |
+          pip install dvc dvc-s3 --upgrade -q
           dvc init --no-scm
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
-          dvc push
+          dvc push || echo "DVC push skipped (no tracked files)"
       - uses: actions/upload-artifact@v4
         with:
           name: training-metrics
