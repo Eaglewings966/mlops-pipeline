@@ -126,12 +126,9 @@ jobs:
       - run: python -m src.pipelines.training_pipeline validate
       - run: python -m src.pipelines.training_pipeline preprocess
       - name: Train model
-        run: |
-          if [ "${{ github.event.inputs.run_tuning }}" = "true" ]; then
-            python -m src.pipelines.training_pipeline train --tuning
-          else
-            python -m src.pipelines.training_pipeline train
-          fi
+        env:
+          RUN_TUNING: ${{ github.event.inputs.run_tuning }}
+        run: python -m src.pipelines.training_pipeline train
       - run: python -m src.pipelines.training_pipeline monitor
       - name: Configure DVC remote and push
         run: |

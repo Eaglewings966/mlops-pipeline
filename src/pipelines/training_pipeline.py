@@ -53,13 +53,14 @@ def preprocess(
 def train(
     data_path: str = typer.Option("data/processed/transactions_processed.csv"),
     params_path: str = typer.Option("params.yaml"),
-    tuning: bool = typer.Option(False),
 ):
     """Stage 3: Train XGBoost model."""
+    import os
     from src.training.trainer import train_fraud_model
 
+    do_tuning = os.environ.get("RUN_TUNING", "false").lower() == "true"
     console.rule("[bold green]Stage 3: Model Training")
-    model, metrics, run_id = train_fraud_model(data_path, params_path, run_tuning=tuning)
+    model, metrics, run_id = train_fraud_model(data_path, params_path, run_tuning=do_tuning)
     rprint("[green]✓ Training complete[/green]")
     rprint(f"  MLflow run ID: {run_id}")
     rprint(f"  AUPRC={metrics['average_precision']:.4f} | ROC-AUC={metrics['roc_auc']:.4f} | F1={metrics['f1_score']:.4f}")
