@@ -53,7 +53,7 @@ def preprocess(
 def train(
     data_path: str = typer.Option("data/processed/transactions_processed.csv"),
     params_path: str = typer.Option("params.yaml"),
-    tuning: bool = typer.Option(False, "--tuning/--no-tuning", help="Run Optuna hyperparameter tuning"),
+    tuning: bool = typer.Option(False, help="Run Optuna hyperparameter tuning (--tuning to enable)"),
 ):
     """Stage 3: Train XGBoost model."""
     from src.training.trainer import train_fraud_model

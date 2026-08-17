@@ -130,7 +130,7 @@ jobs:
           if [ "${{ github.event.inputs.run_tuning }}" = "true" ]; then
             python -m src.pipelines.training_pipeline train --tuning
           else
-            python -m src.pipelines.training_pipeline train --no-tuning
+            python -m src.pipelines.training_pipeline train
           fi
       - run: python -m src.pipelines.training_pipeline monitor
       - name: Configure DVC remote and push
