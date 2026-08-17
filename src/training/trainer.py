@@ -104,126 +104,142 @@ def train_fraud_model(
     mlflow.set_tracking_uri(config.mlflow_tracking_uri)
     mlflow.set_experiment(config.mlflow_experiment_name)
 
-    with mlflow.start_run(run_name="fraud-detection-xgboost") as run:
-        run_id = run.info.run_id
-        logger.info(f"MLflow run ID: {run_id}")
-
-        mlflow.log_params({
-            "dataset_rows": len(df),
-            "feature_count": len(feature_cols),
-            "train_rows": len(X_train_res),
-            "test_rows": len(X_test),
-            "train_fraud_rate": float(y_train_res.mean()),
-            "test_fraud_rate": float(y_test.mean()),
-            "smote_applied": True
-        })
-
-        for section, section_params in params.items():
-            if isinstance(section_params, dict):
-                for k, v in section_params.items():
-                    if not isinstance(v, (dict, list)):
-                        mlflow.log_param(f"{section}.{k}", v)
-
-        n_trials = params.get("training", {}).get("n_optuna_trials", 50)
-        if run_tuning:
-            logger.info(f"Running hyperparameter tuning ({n_trials} trials)...")
-            best_params, _ = run_hyperparameter_tuning(
-                X_train_res, y_train_res, params,
-                n_trials=n_trials, mlflow_run_id=run_id
-            )
-            mlflow.log_param("tuning_method", "optuna_tpe_hyperband")
-        else:
-            logger.info("Using default XGBoost parameters...")
-            best_params = params.get("xgboost_defaults", {})
-
-        final_params = {
-            **best_params,
-            "tree_method": "hist",
-            "eval_metric": "aucpr",
-            "use_label_encoder": False,
-            "random_state": data_params.get("random_state", 42),
-            "n_jobs": -1
-        }
-
-        logger.info("Training final model...")
-        model = xgb.XGBClassifier(**final_params)
-        model.fit(
-            X_train_res, y_train_res,
-            eval_set=[(X_val, y_val)],
-            early_stopping_rounds=50,
-            verbose=100
+    # ----------------------------------------------------------------
+    # Core training — runs regardless of MLflow availability
+    # ----------------------------------------------------------------
+    n_trials = params.get("training", {}).get("n_optuna_trials", 50)
+    if run_tuning:
+        logger.info(f"Running hyperparameter tuning ({n_trials} trials)...")
+        best_params, _ = run_hyperparameter_tuning(
+            X_train_res, y_train_res, params,
+            n_trials=n_trials, mlflow_run_id=None
         )
+    else:
+        logger.info("Using default XGBoost parameters...")
+        best_params = params.get("xgboost_defaults", {})
 
-        y_pred_proba = model.predict_proba(X_test)[:, 1]
-        y_pred = (y_pred_proba >= 0.5).astype(int)
+    final_params = {
+        **best_params,
+        "tree_method": "hist",
+        "eval_metric": "aucpr",
+        "use_label_encoder": False,
+        "random_state": data_params.get("random_state", 42),
+        "n_jobs": -1
+    }
 
-        metrics = {
-            "average_precision": float(average_precision_score(y_test, y_pred_proba)),
-            "roc_auc": float(roc_auc_score(y_test, y_pred_proba)),
-            "f1_score": float(f1_score(y_test, y_pred)),
-            "precision": float(precision_score(y_test, y_pred)),
-            "recall": float(recall_score(y_test, y_pred)),
-            "test_fraud_count": int(y_test.sum()),
-            "test_total": len(y_test)
-        }
+    logger.info("Training final model...")
+    model = xgb.XGBClassifier(**final_params)
+    model.fit(
+        X_train_res, y_train_res,
+        eval_set=[(X_val, y_val)],
+        early_stopping_rounds=50,
+        verbose=100
+    )
 
-        logger.info(
-            f"Test metrics: AUPRC={metrics['average_precision']:.4f}, "
-            f"ROC-AUC={metrics['roc_auc']:.4f}, F1={metrics['f1_score']:.4f}"
-        )
-        mlflow.log_metrics(metrics)
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    y_pred = (y_pred_proba >= 0.5).astype(int)
 
-        # Confusion matrix plot
-        cm = confusion_matrix(y_test, y_pred)
-        fig, ax = plt.subplots(figsize=(6, 5))
-        im = ax.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
-        plt.colorbar(im)
-        ax.set_xlabel("Predicted")
-        ax.set_ylabel("Actual")
-        ax.set_title("Confusion Matrix — Fraud Detection")
-        plt.tight_layout()
-        plt.savefig("/tmp/confusion_matrix.png", dpi=100)
-        plt.close()
-        mlflow.log_artifact("/tmp/confusion_matrix.png")
+    metrics = {
+        "average_precision": float(average_precision_score(y_test, y_pred_proba)),
+        "roc_auc": float(roc_auc_score(y_test, y_pred_proba)),
+        "f1_score": float(f1_score(y_test, y_pred)),
+        "precision": float(precision_score(y_test, y_pred)),
+        "recall": float(recall_score(y_test, y_pred)),
+        "test_fraud_count": int(y_test.sum()),
+        "test_total": len(y_test)
+    }
 
-        # SHAP explainability
-        try:
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X_test[:1000])
-            plt.figure(figsize=(10, 8))
-            shap.summary_plot(shap_values, X_test[:1000], feature_names=feature_cols, show=False)
+    logger.info(
+        f"Test metrics: AUPRC={metrics['average_precision']:.4f}, "
+        f"ROC-AUC={metrics['roc_auc']:.4f}, F1={metrics['f1_score']:.4f}"
+    )
+
+    # Save metrics locally regardless of MLflow
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
+    with open("data/processed/training_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+
+    # Save model locally
+    Path("models/registry").mkdir(parents=True, exist_ok=True)
+    model.save_model("models/registry/model.json")
+
+    # ----------------------------------------------------------------
+    # MLflow logging — optional, won't fail the pipeline if unreachable
+    # ----------------------------------------------------------------
+    run_id = "local-" + Path("data/processed/training_metrics.json").stat().st_mtime.__str__().replace(".", "")[:16]
+    try:
+        with mlflow.start_run(run_name="fraud-detection-xgboost") as run:
+            run_id = run.info.run_id
+            logger.info(f"MLflow run ID: {run_id}")
+
+            mlflow.log_params({
+                "dataset_rows": len(df),
+                "feature_count": len(feature_cols),
+                "train_rows": len(X_train_res),
+                "test_rows": len(X_test),
+                "train_fraud_rate": float(y_train_res.mean()),
+                "test_fraud_rate": float(y_test.mean()),
+                "smote_applied": True,
+                "tuning_method": "optuna_tpe_hyperband" if run_tuning else "defaults",
+            })
+            for section, section_params in params.items():
+                if isinstance(section_params, dict):
+                    for k, v in section_params.items():
+                        if not isinstance(v, (dict, list)):
+                            mlflow.log_param(f"{section}.{k}", v)
+
+            mlflow.log_metrics(metrics)
+
+            # Confusion matrix
+            cm = confusion_matrix(y_test, y_pred)
+            fig, ax = plt.subplots(figsize=(6, 5))
+            im = ax.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
+            plt.colorbar(im)
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            ax.set_title("Confusion Matrix — Fraud Detection")
             plt.tight_layout()
-            plt.savefig("/tmp/shap_summary.png", dpi=100, bbox_inches="tight")
+            plt.savefig("/tmp/confusion_matrix.png", dpi=100)
             plt.close()
-            mlflow.log_artifact("/tmp/shap_summary.png")
-            logger.info("SHAP plots logged to MLflow")
-        except Exception as e:
-            logger.warning(f"SHAP computation failed: {e}")
+            mlflow.log_artifact("/tmp/confusion_matrix.png")
 
-        from mlflow.models.signature import infer_signature
-        mlflow.xgboost.log_model(
-            model,
-            "fraud-detection-model",
-            registered_model_name=config.mlflow_model_name,
-            signature=infer_signature(X_test[:100], model.predict_proba(X_test[:100])),
-            input_example=X_test[:5]
-        )
+            # SHAP
+            try:
+                explainer = shap.TreeExplainer(model)
+                shap_values = explainer.shap_values(X_test[:1000])
+                plt.figure(figsize=(10, 8))
+                shap.summary_plot(shap_values, X_test[:1000], feature_names=feature_cols, show=False)
+                plt.tight_layout()
+                plt.savefig("/tmp/shap_summary.png", dpi=100, bbox_inches="tight")
+                plt.close()
+                mlflow.log_artifact("/tmp/shap_summary.png")
+            except Exception as e:
+                logger.warning(f"SHAP computation failed: {e}")
 
-        Path("data/processed").mkdir(parents=True, exist_ok=True)
-        with open("data/processed/training_metrics.json", "w") as f:
-            json.dump(metrics, f, indent=2)
-
-        # Promote to Production
-        client = mlflow.MlflowClient()
-        versions = client.get_latest_versions(config.mlflow_model_name, stages=["None"])
-        if versions:
-            latest_version = versions[0].version
-            client.transition_model_version_stage(
-                name=config.mlflow_model_name,
-                version=latest_version,
-                stage="Production",
-                archive_existing_versions=True
+            from mlflow.models.signature import infer_signature
+            mlflow.xgboost.log_model(
+                model,
+                "fraud-detection-model",
+                registered_model_name=config.mlflow_model_name,
+                signature=infer_signature(X_test[:100], model.predict_proba(X_test[:100])),
+                input_example=X_test[:5]
             )
-            logger.info(f"Model v{latest_version} promoted to Production stage")
+
+            # Promote to Production
+            client = mlflow.MlflowClient()
+            versions = client.get_latest_versions(config.mlflow_model_name, stages=["None"])
+            if versions:
+                latest_version = versions[0].version
+                client.transition_model_version_stage(
+                    name=config.mlflow_model_name,
+                    version=latest_version,
+                    stage="Production",
+                    archive_existing_versions=True
+                )
+                logger.info(f"Model v{latest_version} promoted to Production stage")
+
+    except Exception as e:
+        logger.warning(f"MLflow logging failed (server unreachable?): {e}")
+        logger.warning("Training artifacts saved locally — pipeline continues.")
 
     return model, metrics, run_id
