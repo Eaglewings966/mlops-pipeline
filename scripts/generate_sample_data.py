@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-def generate_sample_data(n_rows=1000, output_path="data/raw/transactions.csv"):
+def generate_sample_data(n_rows=15000, output_path="data/raw/transactions.csv"):
     """Generate synthetic transactions with minimal required columns."""
     np.random.seed(42)
     
@@ -31,8 +31,8 @@ def generate_sample_data(n_rows=1000, output_path="data/raw/transactions.csv"):
         # Device info
         "DeviceType": np.random.choice(["desktop", "mobile"], n_rows),
         "DeviceInfo": np.random.choice(["Windows", "iOS", "Android", "MacOS"], n_rows),
-        # Target: 10% fraud rate
-        "isFraud": np.random.choice([0, 1], n_rows, p=[0.9, 0.1]),
+        # Target: 3% fraud rate (within expected 0.5%-5% range)
+        "isFraud": np.random.choice([0, 1], n_rows, p=[0.97, 0.03]),
     }
     
     df = pd.DataFrame(data)
