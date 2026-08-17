@@ -82,10 +82,12 @@ jobs:
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
           dvc pull data/raw/transactions.csv || echo "No cached data"
-      - uses: actions/cache@v3
+      - name: Upload raw data as artifact
+        uses: actions/upload-artifact@v4
         with:
-          path: data/
-          key: mlops-data-${{ hashFiles('dvc.lock') }}
+          name: raw-data
+          path: data/raw/transactions.csv
+          retention-days: 1
 
   train:
     name: Train Model
@@ -103,10 +105,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install -r requirements.txt
-      - uses: actions/cache@v3
+      - name: Download raw data
+        uses: actions/download-artifact@v4
         with:
-          path: data/
-          key: mlops-data-${{ hashFiles('dvc.lock') }}
+          name: raw-data
+          path: data/raw/
       - name: Set environment variables
         run: |
           echo "MLFLOW_TRACKING_URI=http://${{ secrets.MLFLOW_HOST }}:5000" >> $GITHUB_ENV
