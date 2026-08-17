@@ -40,9 +40,7 @@ jobs:
           EVIDENTLY_BUCKET: ${{ secrets.EVIDENTLY_BUCKET }}
           SNS_TOPIC_ARN: ${{ secrets.SNS_TOPIC_ARN }}
         run: |
-          python -m src.pipelines.training_pipeline monitor \
-            --reference-path data/reference/reference_data.csv \
-            --current-path data/processed/current_data.csv
+          python -m src.pipelines.training_pipeline monitor --reference-path data/reference/reference_data.csv --current-path data/processed/current_data.csv
       - uses: actions/upload-artifact@v4
         with:
           name: drift-report-${{ github.run_id }}
