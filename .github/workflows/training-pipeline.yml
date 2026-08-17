@@ -76,18 +76,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install dvc dvc-s3
-      - name: Initialize DVC
+      - name: Setup DVC and pull data
         run: |
-          dvc init
-          git config user.email "ci@github-actions"
-          git config user.name "GitHub Actions"
-          git add .dvc
-          git commit -m "ci: init dvc [skip ci]"
-      - name: Configure DVC remote
-        run: |
+          dvc init --no-scm
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
-      - run: dvc pull data/raw/transactions.csv || echo "No cached data"
+          dvc pull data/raw/transactions.csv || echo "No cached data"
       - uses: actions/cache@v3
         with:
           path: data/
@@ -130,9 +124,7 @@ jobs:
       - run: python -m src.pipelines.training_pipeline monitor
       - name: Configure DVC remote and push
         run: |
-          dvc init
-          git config user.email "ci@github-actions"
-          git config user.name "GitHub Actions"
+          dvc init --no-scm
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
           dvc push
