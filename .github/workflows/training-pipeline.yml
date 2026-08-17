@@ -83,6 +83,7 @@ jobs:
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
           if ! dvc pull data/raw/transactions.csv; then
             echo "DVC pull failed or no data cached — generating sample data for CI"
+            pip install pandas numpy
             python scripts/generate_sample_data.py
           fi
       - name: Upload raw data as artifact
