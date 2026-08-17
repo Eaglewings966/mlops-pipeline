@@ -81,7 +81,10 @@ jobs:
           dvc init --no-scm
           dvc remote add -d s3remote s3://${{ secrets.DVC_BUCKET }}/dvc-cache
           dvc remote modify s3remote region ${{ env.AWS_REGION }}
-          dvc pull data/raw/transactions.csv || echo "No cached data"
+          if ! dvc pull data/raw/transactions.csv; then
+            echo "DVC pull failed or no data cached — generating sample data for CI"
+            python scripts/generate_sample_data.py
+          fi
       - name: Upload raw data as artifact
         uses: actions/upload-artifact@v4
         with:
