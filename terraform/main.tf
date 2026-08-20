@@ -284,7 +284,7 @@ resource "aws_iam_role_policy" "mlops_runner" {
         Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
         Condition = {
           StringEquals = {
-            "ssm:resourceTag/Name" = "mlops-serving-server"
+            "ssm:resourceTag/Name" = "mlops-training-server"
           }
         }
       },

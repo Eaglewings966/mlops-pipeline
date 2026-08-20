@@ -157,7 +157,7 @@ jobs:
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=mlops-serving-server" \
+            --targets "Key=tag:Name,Values=mlops-training-server" \
             --parameters 'commands=[
               "cd /home/ec2-user/mlops-pipeline",
               "git pull",
