@@ -268,6 +268,29 @@ resource "aws_iam_role_policy" "mlops_runner" {
         Effect = "Allow"
         Action = ["ssm:GetParameter", "ssm:PutParameter", "ssm:GetParameters"]
         Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/mlops/*"
+      },
+      {
+        # Allow GitHub Actions to run the deployment script only on the serving
+        # instance selected by the workflow's Name tag.
+        Sid    = "SSMDeployServingApi"
+        Effect = "Allow"
+        Action = ["ssm:SendCommand"]
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
+          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "ssm:resourceTag/Name" = "mlops-serving-server"
+          }
+        }
+      },
+      {
+        # GetCommandInvocation does not support resource-level permissions.
+        Sid      = "SSMReadDeploymentCommand"
+        Effect   = "Allow"
+        Action   = ["ssm:GetCommandInvocation"]
+        Resource = "*"
       }
     ]
   })
