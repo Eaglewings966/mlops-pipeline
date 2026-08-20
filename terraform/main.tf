@@ -270,15 +270,18 @@ resource "aws_iam_role_policy" "mlops_runner" {
         Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/mlops/*"
       },
       {
-        # Allow GitHub Actions to run the deployment script only on the serving
-        # instance selected by the workflow's Name tag.
-        Sid    = "SSMDeployServingApi"
+        # AWS-managed documents cannot be tagged in this account.
+        Sid      = "SSMDeployDocument"
         Effect = "Allow"
         Action = ["ssm:SendCommand"]
-        Resource = [
-          "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
-          "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
-        ]
+        Resource = "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript"
+      },
+      {
+        # Restrict Run Command targets to the instance selected by the workflow.
+        Sid    = "SSMDeployServingInstance"
+        Effect = "Allow"
+        Action = ["ssm:SendCommand"]
+        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
         Condition = {
           StringEquals = {
             "ssm:resourceTag/Name" = "mlops-serving-server"
