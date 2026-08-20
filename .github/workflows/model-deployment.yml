@@ -27,25 +27,40 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Validate AWS credentials
         run: aws sts get-caller-identity --output json
-      - name: Deploy model via SSM
+      - name: Deploy model via SSM and wait for readiness
         run: |
-          aws ssm send-command \
+          instance_id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=mlops-training-server" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          test -n "$instance_id" && test "$instance_id" != "None"
+
+          command_id=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=mlops-training-server" \
+            --instance-ids "$instance_id" \
             --parameters 'commands=[
               "cd /home/ec2-user/mlops-pipeline",
               "git pull origin main",
               "pkill -f uvicorn || true",
               "sleep 2",
               "nohup python3.11 -m uvicorn src.serving.api:app --host 0.0.0.0 --port 8000 --workers 2 > /var/log/fraud-api.log 2>&1 &",
-              "sleep 5",
-              "curl -sf http://localhost:8000/health && echo Deployment successful"
+              "for i in {1..30}; do curl -fsS http://localhost:8000/health && exit 0; sleep 5; done",
+              "cat /var/log/fraud-api.log || true",
+              "exit 1"
             ]' \
+            --region ${{ env.AWS_REGION }} \
+            --query "Command.CommandId" \
+            --output text)
+
+          aws ssm wait command-executed \
+            --command-id "$command_id" \
+            --instance-id "$instance_id" \
             --region ${{ env.AWS_REGION }}
       - name: Health check
         run: |
-          sleep 15
-          curl -sf http://${{ secrets.SERVING_HOST }}:8000/health
+          curl --fail --show-error --retry 12 --retry-all-errors \
+            --connect-timeout 5 --max-time 15 \
+            http://${{ secrets.SERVING_HOST }}:8000/health
       - name: Notify
         run: |
           aws sns publish \

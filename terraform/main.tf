@@ -294,6 +294,13 @@ resource "aws_iam_role_policy" "mlops_runner" {
         Effect   = "Allow"
         Action   = ["ssm:GetCommandInvocation"]
         Resource = "*"
+      },
+      {
+        # Resolve the tagged, running deployment instance before sending a command.
+        Sid      = "DescribeDeploymentInstance"
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeInstances"]
+        Resource = "*"
       }
     ]
   })
