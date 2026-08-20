@@ -166,7 +166,11 @@ jobs:
             --instance-ids "$instance_id" \
             --parameters 'commands=[
               "cd /home/ec2-user/mlops-pipeline",
+              "git config --global --add safe.directory /home/ec2-user/mlops-pipeline",
               "git pull origin main",
+              "pkill -f \"mlflow server\" || true",
+              "bash scripts/setup_mlflow.sh",
+              "curl -fsS http://localhost:5000/health",
               "pkill -f uvicorn || true",
               "sleep 2",
               "nohup python3.11 -m uvicorn src.serving.api:app --host 0.0.0.0 --port 8000 > /var/log/fraud-api.log 2>&1 &",
