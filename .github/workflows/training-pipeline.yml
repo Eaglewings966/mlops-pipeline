@@ -178,10 +178,26 @@ jobs:
             --query "Command.CommandId" \
             --output text)
 
-          aws ssm wait command-executed \
-            --command-id "$command_id" \
-            --instance-id "$instance_id" \
-            --region ${{ env.AWS_REGION }}
+          for i in {1..48}; do
+            status=$(aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$instance_id" \
+              --region ${{ env.AWS_REGION }} \
+              --query "Status" \
+              --output text)
+            if [ "$status" = "Success" ]; then
+              break
+            fi
+            if [ "$status" = "Failed" ] || [ "$status" = "Cancelled" ] || [ "$status" = "TimedOut" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$command_id" \
+                --instance-id "$instance_id" \
+                --region ${{ env.AWS_REGION }}
+              exit 1
+            fi
+            sleep 5
+          done
+          test "$status" = "Success"
       - name: Smoke test
         run: |
           curl --fail --show-error --retry 12 --retry-all-errors \
